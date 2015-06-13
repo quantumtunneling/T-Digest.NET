@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Collections.Specialized;
+using System.Diagnostics;
 
 namespace TDigest {
 
@@ -12,19 +13,25 @@ namespace TDigest {
         private C5.TreeDictionary<double, Centroid> _centroids;
         private Random _rand;
         private double _count;
-        private double _delta;
+        private double _accuracy;
         private double _K;
+
+        public double Count {
+            get { return _count; } 
+        }
 
         /// <summary>
         /// Construct a T-Digest
         /// </summary>
-        /// <param name="delta">delta value</param>
+        /// <param name="accuracy">Controls the trade-off between accuracy and memory consumption/performance. 
+        /// Default value is .05, higher values result in better performance and decreased memory usage, while
+        /// lower values result in better accuracy</param>
         /// <param name="K">K value</param>
-        public TDigest(double delta = 0.01, double K = 25) {
+        public TDigest(double accuracy = 0.05, double K = 25) {
             _centroids = new TreeDictionary<double, Centroid>();
             _rand = new Random();
             _count = 0;
-            _delta = delta;
+            _accuracy = accuracy;
             _K = K;
         }
 
@@ -32,37 +39,36 @@ namespace TDigest {
         /// Add a new value to the T-Digest
         /// </summary>
         /// <param name="value">The value to add</param>
-        /// <param name="w">The relative weight associated with this value. Default is 1 for all values.</param>
-        public void Add(double value, double w = 1) {
-            _count += w;
+        /// <param name="weight">The relative weight associated with this value. Default is 1 for all values.</param>
+        public void Add(double value, double weight = 1) {
+            _count += weight;
             if (_centroids.Count == 0) {
-                _centroids.Add(value, new Centroid(value, w));
+                _centroids.Add(value, new Centroid(value, weight));
                 return;
             }
 
-            var candidates = GetClosestCentroids(value)
-                .Select(c => new {
-                    Threshold = GetThreshold(ComputeCentroidQuantile(c)),
-                    Centroid = c
-                })
-                .Where(c => c.Centroid.Count + w < c.Threshold)
-                .ToList();
+            var candidates = GetClosestCentroids(value).Select(c => new {
+                Threshold = GetThreshold(ComputeCentroidQuantile(c)),
+                Centroid = c
+            })
+            .Where(c => c.Centroid.Count + weight < c.Threshold)
+            .ToList();
 
-            while (candidates.Count > 0 & w > 0) {
-                var c = candidates[_rand.Next() % candidates.Count];
-                var delta_w = Math.Min(c.Threshold - c.Centroid.Count, w);
+            while (candidates.Count > 0 & weight > 0) {
+                var cData = candidates[_rand.Next() % candidates.Count];
+                var delta_w = Math.Min(cData.Threshold - cData.Centroid.Count, weight);
 
-                _centroids.Remove(c.Centroid.Mean);
-                c.Centroid.Count += delta_w;
-                c.Centroid.Mean += delta_w * (value - c.Centroid.Mean) / c.Centroid.Count;
-                _centroids.Add(c.Centroid.Mean, c.Centroid);
-                w -= delta_w;
-                
-                candidates.Remove(c);
+                _centroids.Remove(cData.Centroid.Mean);
+                cData.Centroid.Count += delta_w;
+                cData.Centroid.Mean += delta_w * (value - cData.Centroid.Mean) / cData.Centroid.Count;
+                _centroids.Add(cData.Centroid.Mean, cData.Centroid);
+                weight -= delta_w;
+
+                candidates.Remove(cData);
             }
 
-            if (w > 0) _centroids.Add(value, new Centroid(value, w));
-            if (_centroids.Count > (_K / _delta)) Compress();
+            if (weight > 0) _centroids.Add(value, new Centroid(value, weight));
+            if (_centroids.Count > (_K / _accuracy)) Compress();
         }
 
         /// <summary>
@@ -75,30 +81,30 @@ namespace TDigest {
                 throw new ArgumentOutOfRangeException("quantile must be between 0 and 1");
             }
 
-            var q = quantile * _count;
+            double q = quantile * _count;
             double t = 0;
             int i=0;
             Centroid last = null;
-            foreach (var centroid in _centroids.Values) {
+            foreach (Centroid centroid in _centroids.Values) {
                 last = centroid;
-                var k = centroid.Count;
+                double k = centroid.Count;
                 if (q < t + k) {
                     double delta;
                     if (i == 0) {
-                        var ceiling = _centroids.Successor(centroid.Mean).Value;
-                        delta = ceiling.Mean - centroid.Mean;
+                        Centroid successor = _centroids.Successor(centroid.Mean).Value;
+                        delta = successor.Mean - centroid.Mean;
                     }
                     else if (i == _centroids.Count - 1) {
-                        var floor = _centroids.Predecessor(centroid.Mean).Value;
-                        delta = centroid.Mean - floor.Mean;
+                        Centroid predecessor = _centroids.Predecessor(centroid.Mean).Value;
+                        delta = centroid.Mean - predecessor.Mean;
                     }
                     else {
-                        var ceiling = _centroids.Successor(centroid.Mean).Value;
-                        var floor = _centroids.Predecessor(centroid.Mean).Value;
-                        delta = (ceiling.Mean - floor.Mean) / 2;
+                        Centroid successor = _centroids.Successor(centroid.Mean).Value;
+                        Centroid predecessor = _centroids.Predecessor(centroid.Mean).Value;
+                        delta = (successor.Mean - predecessor.Mean) / 2;
                     }
 
-                    var ret = centroid.Mean + ((q - t) / k - .5) * delta;
+                    return centroid.Mean + ((q - t) / k - .5) * delta;
                 }
                 t += k;
                 i++;
@@ -109,7 +115,7 @@ namespace TDigest {
 
         private double ComputeCentroidQuantile(Centroid centroid) {
             double sum = 0;
-            foreach (var c in _centroids.Values) {
+            foreach (Centroid c in _centroids.Values) {
                 if (c.Mean > centroid.Mean) break;
                 sum += c.Count; 
             }
@@ -121,15 +127,12 @@ namespace TDigest {
         private IEnumerable<Centroid> GetClosestCentroids(double x) {
             C5.KeyValuePair<double, Centroid> successor;
             C5.KeyValuePair<double, Centroid> predecessor;
-            bool hasSuccessor;
-            bool hasPredecessor;
+            bool hasSuccessor = _centroids.TryWeakSuccessor(x, out successor);
+            bool hasPredecessor = _centroids.TryWeakPredecessor(x, out predecessor);
 
-            hasSuccessor = _centroids.TryWeakSuccessor(x, out successor);
-            hasPredecessor = _centroids.TryWeakPredecessor(x, out predecessor);
-
-            if (hasPredecessor & hasPredecessor) {
-                var aDiff = Math.Abs(successor.Value.Mean - x);
-                var bDiff = Math.Abs(predecessor.Value.Mean - x);
+            if (hasSuccessor & hasPredecessor) {
+                double aDiff = Math.Abs(successor.Value.Mean - x);
+                double bDiff = Math.Abs(predecessor.Value.Mean - x);
 
                 if (aDiff < bDiff) yield return successor.Value;
                 else if (bDiff < aDiff) yield return predecessor.Value;
@@ -139,18 +142,19 @@ namespace TDigest {
                 }
             }
             else if (hasSuccessor) yield return successor.Value;
-            else yield return predecessor.Value;
+            else if (hasPredecessor) yield return predecessor.Value;
+            else yield break;
         }
 
         private double GetThreshold(double q) {
-            return 4 * _count * _delta * q * (1 - q);
+            return 4 * _count * _accuracy * q * (1 - q);
         }
 
         private void Compress() {
-            var newTDigest = new TDigest(_delta, _K);
-            var temp = _centroids.Values.ToList();
+            TDigest newTDigest = new TDigest(_accuracy, _K);
+            List<Centroid> temp = _centroids.Values.ToList();
             Shuffle(temp);
-            foreach (var centroid in temp) {
+            foreach (Centroid centroid in temp) {
                 newTDigest.Add(centroid.Mean, centroid.Count);
             }
             _centroids = newTDigest._centroids; 
