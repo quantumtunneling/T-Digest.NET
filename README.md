@@ -6,4 +6,16 @@ The T-Digest white paper can be found <a href="https://github.com/tdunning/t-dig
 
 The original java implementation can be found <a href="https://github.com/tdunning/t-digest">here</a>
 
+Example Code:
 
+    Random r = new Random();
+    TDigest digest = new TDigest();
+    
+    for (var i=0; i<10000; i++) {
+    	var value = r.nextDouble();
+    	digest.Add(value);
+    }
+    
+    var median = digest.Quantile(.5);
+    var n99th = digest.Quantile(.99);
+    var n999th = digest.Quantile(.999);
