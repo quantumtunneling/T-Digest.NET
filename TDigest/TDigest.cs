@@ -16,9 +16,23 @@ namespace TDigest {
         private double _accuracy;
         private double _K;
 
+        /// <summary>
+        /// Returns the sum of the weights of all objects added to the Digest. 
+        /// Since the default weight for each object is 1, this will be equal to the number
+        /// of objects added to the digest unless custom weights are used.
+        /// </summary>
         public double Count {
             get { return _count; } 
         }
+
+        /// <summary>
+        /// Returns the number of Internal Centroid objects allocated. 
+        /// The number of these objects is directly proportional to the amount of memory used.
+        /// </summary>
+        public int CentroidCount {
+            get { return _centroids.Count; }
+        }
+
 
         /// <summary>
         /// Construct a T-Digest
@@ -27,7 +41,7 @@ namespace TDigest {
         /// Default value is .05, higher values result in better performance and decreased memory usage, while
         /// lower values result in better accuracy</param>
         /// <param name="K">K value</param>
-        public TDigest(double accuracy = 0.05, double K = 25) {
+        public TDigest(double accuracy = 0.02, double K = 25) {
             _centroids = new TreeDictionary<double, Centroid>();
             _rand = new Random();
             _count = 0;
@@ -47,28 +61,41 @@ namespace TDigest {
                 return;
             }
 
-            var candidates = GetClosestCentroids(value).Select(c => new {
-                Threshold = GetThreshold(ComputeCentroidQuantile(c)),
-                Centroid = c
-            })
-            .Where(c => c.Centroid.Count + weight < c.Threshold)
-            .ToList();
+            var closest = GetClosestCentroids(value);
+
+            var candidates = closest
+                .Select(c => new {
+                    Threshold = GetThreshold(ComputeCentroidQuantile(c)),
+                    Centroid = c
+                })
+                .Where(c => c.Centroid.Count + weight < c.Threshold)
+                .ToList();
 
             while (candidates.Count > 0 & weight > 0) {
                 var cData = candidates[_rand.Next() % candidates.Count];
                 var delta_w = Math.Min(cData.Threshold - cData.Centroid.Count, weight);
 
-                _centroids.Remove(cData.Centroid.Mean);
-                cData.Centroid.Count += delta_w;
-                cData.Centroid.Mean += delta_w * (value - cData.Centroid.Mean) / cData.Centroid.Count;
-                _centroids.Add(cData.Centroid.Mean, cData.Centroid);
-                weight -= delta_w;
+                double oldMean;
+                if (cData.Centroid.Update(delta_w, value, out oldMean)) {
+                    ReInsertCentroid(oldMean, cData.Centroid);
+                }
 
+                weight -= delta_w;
                 candidates.Remove(cData);
             }
 
-            if (weight > 0) _centroids.Add(value, new Centroid(value, weight));
-            if (_centroids.Count > (_K / _accuracy)) Compress();
+            if (weight > 0) {
+                var toAdd = new Centroid(value, weight);
+                if (_centroids.FindOrAdd(value, ref toAdd)) {
+                    double oldMean;
+                    if (toAdd.Update(weight, toAdd.Mean, out oldMean)) {
+                        ReInsertCentroid(oldMean, toAdd);
+                    }                        
+                }
+            }
+            if (_centroids.Count > (_K / _accuracy)) {
+                Compress();
+            }
         }
 
         /// <summary>
@@ -79,6 +106,13 @@ namespace TDigest {
         public double Quantile(double quantile) {
             if (quantile < 0 || quantile > 1) {
                 throw new ArgumentOutOfRangeException("quantile must be between 0 and 1");
+            }
+            if (_centroids.Count == 0) {
+                throw new InvalidOperationException("Cannot call Quantile() method until first Adding values to the digest");
+            }
+
+            if (_centroids.Count == 1) {
+                return _centroids.First().Value.Mean;
             }
 
             double q = quantile * _count;
@@ -127,37 +161,48 @@ namespace TDigest {
         private IEnumerable<Centroid> GetClosestCentroids(double x) {
             C5.KeyValuePair<double, Centroid> successor;
             C5.KeyValuePair<double, Centroid> predecessor;
-            bool hasSuccessor = _centroids.TryWeakSuccessor(x, out successor);
-            bool hasPredecessor = _centroids.TryWeakPredecessor(x, out predecessor);
 
-            if (hasSuccessor & hasPredecessor) {
-                double aDiff = Math.Abs(successor.Value.Mean - x);
-                double bDiff = Math.Abs(predecessor.Value.Mean - x);
-
-                if (aDiff < bDiff) yield return successor.Value;
-                else if (bDiff < aDiff) yield return predecessor.Value;
-                else {
-                    yield return successor.Value;
-                    yield return predecessor.Value;
-                }
+            if (!_centroids.TryWeakSuccessor(x, out successor)) {
+                yield return _centroids.Predecessor(x).Value;
+                yield break;
             }
-            else if (hasSuccessor) yield return successor.Value;
-            else if (hasPredecessor) yield return predecessor.Value;
-            else yield break;
+
+            if (successor.Value.Mean == x || !_centroids.TryPredecessor(x, out predecessor)) {
+                yield return successor.Value;
+                yield break;
+            }
+
+            double sDiff = Math.Abs(successor.Value.Mean - x);
+            double pDiff = Math.Abs(successor.Value.Mean - x);
+
+            if (sDiff < pDiff) yield return successor.Value;
+            else if (pDiff < sDiff) yield return predecessor.Value;
+            else {
+                yield return successor.Value;
+                yield return predecessor.Value;
+            }
         }
 
         private double GetThreshold(double q) {
             return 4 * _count * _accuracy * q * (1 - q);
         }
 
-        private void Compress() {
+        public bool Compress() {
+            Debug.WriteLine("PreCompress: "+CentroidCount);
             TDigest newTDigest = new TDigest(_accuracy, _K);
             List<Centroid> temp = _centroids.Values.ToList();
             Shuffle(temp);
             foreach (Centroid centroid in temp) {
                 newTDigest.Add(centroid.Mean, centroid.Count);
             }
-            _centroids = newTDigest._centroids; 
+            _centroids = newTDigest._centroids;
+            Debug.WriteLine("PostCompress: "+CentroidCount);
+            return true;
+        }
+
+        private void ReInsertCentroid(double oldMean, Centroid c) {
+            var ret = _centroids.Remove(oldMean);
+            _centroids.Add(c.Mean, c);
         }
 
         private void Shuffle(System.Collections.Generic.IList<Centroid> centroids) {
@@ -179,6 +224,13 @@ namespace TDigest {
         public Centroid(double mean, double count) {
             Mean = mean;
             Count = count;
+        }
+
+        public bool Update(double delta_w, double value, out double oldMean) {
+            oldMean = Mean;
+            Count += delta_w;
+            Mean += delta_w * (value - Mean) / Count;
+            return oldMean != Mean;
         }
     }
 }
