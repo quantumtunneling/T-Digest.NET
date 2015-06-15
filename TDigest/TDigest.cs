@@ -11,7 +11,7 @@ namespace TDigest {
 
     public class TDigest {
         private C5.TreeDictionary<double, Centroid> _centroids;
-        private Random _rand;
+        private static Random _rand;
         private double _count;
         private double _accuracy;
         private double _K;
@@ -33,6 +33,21 @@ namespace TDigest {
             get { return _centroids.Count; }
         }
 
+        /// <summary>
+        /// Merge two T-Digests
+        /// </summary>
+        /// <param name="a">The first T-Digest</param>
+        /// <param name="b">The second T-Digest</param>
+        /// <returns>A T-Digest created by merging the specified T-Digests</returns>
+        public static TDigest Merge(TDigest a, TDigest b) {
+            TDigest merged = new TDigest();
+            Centroid[] combined = a._centroids.Values.Concat(b._centroids.Values).ToArray();
+            Shuffle(combined);
+            foreach (var c in combined) {
+                merged.Add(c.Mean, c.Count);
+            }
+            return merged;
+        }
 
         /// <summary>
         /// Construct a T-Digest
@@ -205,7 +220,7 @@ namespace TDigest {
             _centroids.Add(c.Mean, c);
         }
 
-        private void Shuffle(System.Collections.Generic.IList<Centroid> centroids) {
+        private static void Shuffle(System.Collections.Generic.IList<Centroid> centroids) {
             int n = centroids.Count;
             while (n > 1) {
                 n--;
