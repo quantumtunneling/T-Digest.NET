@@ -71,6 +71,8 @@ namespace TDigest.Tests {
             }
             actual.Sort();
 
+            var z = digest.Quantile(0);
+
             var avgError = GetAvgError(actual, digest);
             Assert.IsTrue(avgError < .5);
         }
@@ -131,6 +133,31 @@ namespace TDigest.Tests {
 
             var avgError = GetAvgError(actual, digest);
             Assert.IsTrue(avgError < .5);
+        }
+
+        [TestMethod]
+        public void TestSerialization() {
+            Random r = new Random();
+
+            TDigest digestA = new TDigest();
+            for (int i = 0; i < 10000; i++) {
+                var n = (r.Next() % 50) + (r.Next() % 50);
+                digestA.Add(n);
+            }
+
+            byte[] s = digestA.Serialize();
+            TDigest digestB = new TDigest(s);
+
+            Assert.AreEqual(digestA.Count, digestB.Count);
+            Assert.AreEqual(digestA.CentroidCount, digestB.CentroidCount);
+            Assert.AreEqual(digestA.CompressionConstant, digestB.CompressionConstant);
+            Assert.AreEqual(digestA.Accuracy, digestB.Accuracy);
+
+            var areEqual = Enumerable.Range(1, 999)
+                .Select(n => n / 1000.0)
+                .All(q => digestA.Quantile(q) == digestB.Quantile(q));
+
+            Assert.IsTrue(areEqual, "Serialized TDigest is not the same as original");
         }
 
         private double GetAvgError(IList<double> all, TDigest digest) {

@@ -13,8 +13,6 @@ namespace TDigest {
         private C5.TreeDictionary<double, Centroid> _centroids;
         private static Random _rand;
         private double _count;
-        private double _accuracy;
-        private double _K;
 
         /// <summary>
         /// Returns the sum of the weights of all objects added to the Digest. 
@@ -34,6 +32,16 @@ namespace TDigest {
         }
 
         /// <summary>
+        /// Gets the Accuracy setting as specified in the constructor
+        /// </summary>
+        public double Accuracy { get; private set; }
+
+        /// <summary>
+        /// Gets the Compression Constant Setting as specified in the constructor
+        /// </summary>
+        public double CompressionConstant { get; private set; }
+
+        /// <summary>
         /// Merge two T-Digests
         /// </summary>
         /// <param name="a">The first T-Digest</param>
@@ -42,7 +50,7 @@ namespace TDigest {
         public static TDigest Merge(TDigest a, TDigest b) {
             TDigest merged = new TDigest();
             Centroid[] combined = a._centroids.Values.Concat(b._centroids.Values).ToArray();
-            Shuffle(combined);
+            combined.Shuffle();
             foreach (var c in combined) {
                 merged.Add(c.Mean, c.Count);
             }
@@ -60,8 +68,37 @@ namespace TDigest {
             _centroids = new TreeDictionary<double, Centroid>();
             _rand = new Random();
             _count = 0;
-            _accuracy = accuracy;
-            _K = K;
+            Accuracy = accuracy;
+            CompressionConstant = K;
+        }
+
+        /// <summary>
+        /// Construct a TDigest from a serialized string of Bytes
+        /// </summary>
+        /// <param name="serialized"></param>
+        public TDigest(byte[] serialized) 
+            : this()
+        {
+            if (serialized.Length % 16 != 0) {
+                throw new ArgumentException("Serialized data is invalid or corrupted");
+            }
+
+            Accuracy = BitConverter.ToDouble(serialized, 0);
+            CompressionConstant = BitConverter.ToDouble(serialized, 8);
+
+            var centroids = Enumerable.Range(1, serialized.Length / 16 - 1)
+                .Select(i => new {
+                    Mean = BitConverter.ToDouble(serialized, i * 16),
+                    Count = BitConverter.ToDouble(serialized, i * 16 + 8)
+                })
+                .Select(d => new Centroid(d.Mean, d.Count));
+
+            var kvPairs = centroids
+                .Select(c => new C5.KeyValuePair<double, Centroid>(c.Mean, c))
+                .ToArray();
+
+            _count = centroids.Sum(c => c.Count);
+            _centroids.AddAll(kvPairs);
         }
 
         /// <summary>
@@ -108,7 +145,7 @@ namespace TDigest {
                     }                        
                 }
             }
-            if (_centroids.Count > (_K / _accuracy)) {
+            if (_centroids.Count > (CompressionConstant / Accuracy)) {
                 Compress();
             }
         }
@@ -120,7 +157,7 @@ namespace TDigest {
         /// <returns>The value for the estimated quantile</returns>
         public double Quantile(double quantile) {
             if (quantile < 0 || quantile > 1) {
-                throw new ArgumentOutOfRangeException("quantile must be between 0 and 1");
+                throw new ArgumentOutOfRangeException("Quantile must be between 0 and 1");
             }
             if (_centroids.Count == 0) {
                 throw new InvalidOperationException("Cannot call Quantile() method until first Adding values to the digest");
@@ -130,9 +167,9 @@ namespace TDigest {
                 return _centroids.First().Value.Mean;
             }
 
-            double q = quantile * _count;
-            double t = 0;
             int i=0;
+            double t = 0;
+            double q = quantile * _count;
             Centroid last = null;
             foreach (Centroid centroid in _centroids.Values) {
                 last = centroid;
@@ -160,6 +197,28 @@ namespace TDigest {
             }
 
             return last.Mean;
+        }
+
+        /// <summary>
+        /// Gets the Distribution of the data added thus far
+        /// </summary>
+        /// <returns>An array of objects that contain a value (x-axis) and a count (y-axis) 
+        /// which can be used to plot a distribution of the data set</returns>
+        public DistributionPoint[] GetDistribution() {
+            return _centroids.Values
+                .Select(c => new DistributionPoint(c.Mean, c.Count))
+                .ToArray();
+        }
+
+        /// <summary>
+        /// Serializes this T-Digest to a byte[]
+        /// </summary>
+        /// <returns></returns>
+        public Byte[] Serialize() {
+            var fields = BitConverter.GetBytes(Accuracy).Concat(BitConverter.GetBytes(CompressionConstant));
+            var data = _centroids.Values
+                .SelectMany(c => BitConverter.GetBytes(c.Mean).Concat(BitConverter.GetBytes(c.Count)));
+            return fields.Concat(data).ToArray();
         }
 
         private double ComputeCentroidQuantile(Centroid centroid) {
@@ -199,14 +258,13 @@ namespace TDigest {
         }
 
         private double GetThreshold(double q) {
-            return 4 * _count * _accuracy * q * (1 - q);
+            return 4 * _count * Accuracy * q * (1 - q);
         }
 
         public bool Compress() {
-            Debug.WriteLine("PreCompress: "+CentroidCount);
-            TDigest newTDigest = new TDigest(_accuracy, _K);
+            TDigest newTDigest = new TDigest(Accuracy, CompressionConstant);
             List<Centroid> temp = _centroids.Values.ToList();
-            Shuffle(temp);
+            temp.Shuffle();
             foreach (Centroid centroid in temp) {
                 newTDigest.Add(centroid.Mean, centroid.Count);
             }
@@ -219,22 +277,20 @@ namespace TDigest {
             var ret = _centroids.Remove(oldMean);
             _centroids.Add(c.Mean, c);
         }
+    }
 
-        private static void Shuffle(System.Collections.Generic.IList<Centroid> centroids) {
-            int n = centroids.Count;
-            while (n > 1) {
-                n--;
-                int k = _rand.Next(n + 1);
-                Centroid c = centroids[k];
-                centroids[k] = centroids[n];
-                centroids[n] = c;
-            }
+    public class DistributionPoint {
+        public double Value { get; private set; }
+        public double Count { get; private set; }
+        public DistributionPoint(double value, double count) {
+            Value = value;
+            Count = count;
         }
     }
 
     internal class Centroid {
-        public double Mean { get; set; }
-        public double Count { get; set; }
+        public double Mean { get; private set; }
+        public double Count { get; private set; }
 
         public Centroid(double mean, double count) {
             Mean = mean;
