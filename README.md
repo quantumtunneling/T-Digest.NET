@@ -8,6 +8,9 @@ The original java implementation can be found <a href="https://github.com/tdunni
 
 Example Code:
 
+    using StatsLib;
+    ...
+    
     Random r = new Random();
     TDigest digest = new TDigest();
     
