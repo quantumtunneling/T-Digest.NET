@@ -8,10 +8,13 @@ The original java implementation can be found <a href="https://github.com/tdunni
 
 Example Code:
 
+    using StatsLib;
+    ...
+    
     Random r = new Random();
     TDigest digest = new TDigest();
     
-    for (var i=0; i<10000; i++) {
+    for (var i=0; i<1000000; i++) {
     	var value = r.nextDouble();
     	digest.Add(value);
     }

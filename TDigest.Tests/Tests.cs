@@ -4,7 +4,7 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace TDigest.Tests {
+namespace StatsLib.Tests {
     [TestClass]
     public class Tests {
 
