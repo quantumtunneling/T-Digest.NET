@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace TDigest {
+namespace StatsLib {
     public static class Extensions {
 
         public static void Shuffle<T>(this IList<T> list) {
