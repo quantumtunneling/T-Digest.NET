@@ -24,7 +24,10 @@ namespace StatsLib.Tests {
             Assert.AreEqual(10000, actual.Count);
             Assert.AreEqual(10000, digest.Count);
 
-            var avgError = GetAvgError(actual, digest);
+            Assert.IsTrue(GetAvgError(actual, digest) < .01);
+            Assert.IsTrue(MaxIsEqual(actual, digest));
+            Assert.IsTrue(MinIsEqual(actual, digest));
+            var avgError = GetAvgPercentileError(actual, digest);
             Assert.IsTrue(avgError < .0005);
         }
 
@@ -40,7 +43,10 @@ namespace StatsLib.Tests {
             }
             actual.Sort();
 
-            var avgError = GetAvgError(actual, digest);
+            Assert.IsTrue(GetAvgError(actual, digest) < .01);
+            Assert.IsTrue(MaxIsEqual(actual, digest));
+            Assert.IsTrue(MinIsEqual(actual, digest));
+            var avgError = GetAvgPercentileError(actual, digest);
             Assert.IsTrue(avgError == 0);
         }
 
@@ -55,7 +61,10 @@ namespace StatsLib.Tests {
             }
             actual.Sort();
 
-            var avgError = GetAvgError(actual, digest);
+            Assert.IsTrue(GetAvgError(actual, digest) < .01);
+            Assert.IsTrue(MaxIsEqual(actual, digest));
+            Assert.IsTrue(MinIsEqual(actual, digest));
+            var avgError = GetAvgPercentileError(actual, digest);
             Assert.IsTrue(avgError < 5);
         }
 
@@ -73,7 +82,10 @@ namespace StatsLib.Tests {
 
             var z = digest.Quantile(0);
 
-            var avgError = GetAvgError(actual, digest);
+            Assert.IsTrue(GetAvgError(actual, digest) < .01);
+            Assert.IsTrue(MaxIsEqual(actual, digest));
+            Assert.IsTrue(MinIsEqual(actual, digest));
+            var avgError = GetAvgPercentileError(actual, digest);
             Assert.IsTrue(avgError < .5);
         }
 
@@ -110,11 +122,13 @@ namespace StatsLib.Tests {
             Random r = new Random();
 
             TDigest digestA = new TDigest();
-            List<double> actualA = new List<double>();
+            TDigest digestAll = new TDigest();
+            List<double> actual = new List<double>();
             for (int i = 0; i < 10000; i++) {
                 var n = (r.Next() % 50) + (r.Next() % 50);
                 digestA.Add(n);
-                actualA.Add(n);
+                digestAll.Add(n);
+                actual.Add(n);
             }
 
             TDigest digestB = new TDigest();
@@ -122,17 +136,21 @@ namespace StatsLib.Tests {
             for (int i = 0; i < 10000; i++) {
                 var n = (r.Next() % 100) + (r.Next() % 100);
                 digestB.Add(n);
-                actualB.Add(n);
+                digestAll.Add(n);
+                actual.Add(n);
             }
 
-            var actual = actualA.Concat(actualB).ToList();
             actual.Sort();
 
-            var digest = TDigest.Merge(digestA, digestB);
-            Assert.AreEqual(actual.Count, digest.Count);
+            var merged = TDigest.Merge(digestA, digestB);
+            Assert.AreEqual(actual.Count, merged.Count);
 
-            var avgError = GetAvgError(actual, digest);
+            var avgError = GetAvgPercentileError(actual, merged);
             Assert.IsTrue(avgError < .5);
+
+            var trueAvg = actual.Average();
+            var deltaAvg = Math.Abs(digestAll.Average - merged.Average);
+            Assert.IsTrue(deltaAvg < .01);
         }
 
         [TestMethod]
@@ -148,10 +166,19 @@ namespace StatsLib.Tests {
             byte[] s = digestA.Serialize();
             TDigest digestB = new TDigest(s);
 
-            Assert.AreEqual(digestA.Count, digestB.Count);
-            Assert.AreEqual(digestA.CentroidCount, digestB.CentroidCount);
-            Assert.AreEqual(digestA.CompressionConstant, digestB.CompressionConstant);
-            Assert.AreEqual(digestA.Accuracy, digestB.Accuracy);
+            var a = digestA.GetDistribution();
+            var b = digestB.GetDistribution();
+            for (int i=0; i<a.Length; i++) {
+                var ce = a[i].Count == b[i].Count;
+                var me = a[i].Value == b[i].Value;
+                Assert.IsTrue(ce && me, "Centroid means or counts are not equal after serialization");
+            }
+
+            Assert.AreEqual(digestA.Average, digestB.Average, "Averages are not equal after serialization");
+            Assert.AreEqual(digestA.Count, digestB.Count, "Counts are not equal after serialization");
+            Assert.AreEqual(digestA.CentroidCount, digestB.CentroidCount, "Centroid Counts are not equal after serialization");
+            Assert.AreEqual(digestA.CompressionConstant, digestB.CompressionConstant, "Compression Constants are not equal after serialization");
+            Assert.AreEqual(digestA.Accuracy, digestB.Accuracy, "Accuracies are not equal after serialization");
 
             var areEqual = Enumerable.Range(1, 999)
                 .Select(n => n / 1000.0)
@@ -160,11 +187,23 @@ namespace StatsLib.Tests {
             Assert.IsTrue(areEqual, "Serialized TDigest is not the same as original");
         }
 
-        private double GetAvgError(IList<double> all, TDigest digest) {
+        private double GetAvgPercentileError(IList<double> all, TDigest digest) {
             return Enumerable.Range(1, 999)
                 .Select(n => n / 1000.0)
                 .Select(q => Math.Abs(all.Quantile(q)-digest.Quantile(q)))
                 .Average();
+        }
+
+        private double GetAvgError(IList<double> actual, TDigest digest) {
+            return Math.Abs(actual.Average() - digest.Average);
+        }
+
+        private bool MaxIsEqual(IList<double> actual, TDigest digest) {
+            return actual.Max() == digest.Max;
+        }
+
+        private bool MinIsEqual(IList<double> actual, TDigest digest) {
+            return actual.Min() == digest.Min;
         }
     }
 
