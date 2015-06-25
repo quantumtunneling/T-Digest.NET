@@ -4,8 +4,6 @@
 
 The T-Digest white paper can be found <a href="https://github.com/tdunning/t-digest/blob/master/docs/t-digest-paper/histo.pdf">here</a>
 
-The original java implementation can be found <a href="https://github.com/tdunning/t-digest">here</a>
-
 Example Code:
 
     using StatsLib;
