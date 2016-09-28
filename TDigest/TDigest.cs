@@ -118,11 +118,13 @@ namespace StatsLib {
             _oldAvg = BitConverter.ToDouble(serialized, 8);
             Accuracy = BitConverter.ToDouble(serialized, 16);
             CompressionConstant = BitConverter.ToDouble(serialized, 24);
+            Min = BitConverter.ToDouble(serialized, 32);
+            Max = BitConverter.ToDouble(serialized, 40);
 
-            var centroids = Enumerable.Range(0, (serialized.Length-32)/16)
+            var centroids = Enumerable.Range(0, (serialized.Length-48)/16)
                 .Select(i => new {
-                    Mean = BitConverter.ToDouble(serialized, i * 16 + 32),
-                    Count = BitConverter.ToDouble(serialized, i * 16 + 8 + 32)
+                    Mean = BitConverter.ToDouble(serialized, i * 16 + 48),
+                    Count = BitConverter.ToDouble(serialized, i * 16 + 8 + 48)
                 })
                 .Select(d => new Centroid(d.Mean, d.Count));
 
@@ -246,7 +248,10 @@ namespace StatsLib {
                         delta = (successor.Mean - predecessor.Mean) / 2;
                     }
 
-                    return centroid.Mean + ((q - t) / k - .5) * delta;
+                    double estimated = centroid.Mean + ((q - t) / k - .5) * delta;
+
+                    // If estimated value is higher than max, return max
+                    return Math.Min(estimated, this.Max);
                 }
 
                 t += k;
@@ -274,7 +279,7 @@ namespace StatsLib {
         public Byte[] Serialize() {
             var count = _centroids.Values.Sum(c => c.Count);
 
-            var fields = new[] { _newAvg, _oldAvg, Accuracy, CompressionConstant }
+            var fields = new[] { _newAvg, _oldAvg, Accuracy, CompressionConstant, Min, Max }
                 .SelectMany(f => BitConverter.GetBytes(f));
 
             var data = _centroids.Values

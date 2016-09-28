@@ -180,9 +180,13 @@ namespace StatsLib.Tests {
             Assert.AreEqual(digestA.CompressionConstant, digestB.CompressionConstant, "Compression Constants are not equal after serialization");
             Assert.AreEqual(digestA.Accuracy, digestB.Accuracy, "Accuracies are not equal after serialization");
 
-            var areEqual = Enumerable.Range(1, 999)
+            var differences = Enumerable.Range(1, 999)
                 .Select(n => n / 1000.0)
-                .All(q => digestA.Quantile(q) == digestB.Quantile(q));
+                .Where(q => digestA.Quantile(q) != digestB.Quantile(q))
+                .Select(q => new { q, A = digestA.Quantile(q), B = digestB.Quantile(q) })
+                .ToList();
+
+            var areEqual = !differences.Any();
 
             Assert.IsTrue(areEqual, "Serialized TDigest is not the same as original");
         }
