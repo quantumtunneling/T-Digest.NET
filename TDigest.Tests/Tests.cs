@@ -9,20 +9,36 @@ namespace StatsLib.Tests {
     public class Tests {
 
         [TestMethod]
+        public void TestFixForNegativeQuantileBug()
+        {
+            var r = new Random();
+            var numbers = new List<int>();
+            var digest = new TDigest();
+            for (var i = 0; i < 10 * 1000; i++)
+            {
+                var n = r.NextDouble() < 0.001 ? 10001 : r.Next(0, 100);
+                digest.Add(n);
+                numbers.Add(n);
+                var q99 = digest.Quantile(0.99);
+                Assert.IsTrue(q99 >= 0, string.Format("q99: {0}, numbers: {1}", q99, string.Join(",", numbers)));
+            }
+        }
+
+        [TestMethod]
         public void TestUniformDistribution() {
             Random r = new Random();
 
             TDigest digest = new TDigest();
             List<double> actual = new List<double>();
-            for (int i = 0; i < 10000; i++) {
+            for (int i = 0; i < 50000; i++) {
                 var v = r.NextDouble();
                 digest.Add(v);
                 actual.Add(v);
             }
 
             actual.Sort();
-            Assert.AreEqual(10000, actual.Count);
-            Assert.AreEqual(10000, digest.Count);
+            Assert.AreEqual(50000, actual.Count);
+            Assert.AreEqual(50000, digest.Count);
 
             Assert.IsTrue(GetAvgError(actual, digest) < .01);
             Assert.IsTrue(MaxIsEqual(actual, digest));

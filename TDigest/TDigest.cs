@@ -219,46 +219,96 @@ namespace StatsLib {
                 throw new InvalidOperationException("Cannot call Quantile() method until first Adding values to the digest");
             }
 
-            if (_centroids.Count == 1) {
+            if (_centroids.Count == 1)
+            {
                 return _centroids.First().Value.Mean;
             }
 
-            int i=0;
-            double t = 0;
-            double q = quantile * _count;
-            Centroid last = null;
-
-            foreach (Centroid centroid in _centroids.Values) {
-                last = centroid;
-                double k = centroid.Count;
-
-                if (q < t + k) {
-                    double delta;
-                    if (i == 0) {
-                        Centroid successor = _centroids.Successor(centroid.Mean).Value;
-                        delta = successor.Mean - centroid.Mean;
-                    }
-                    else if (i == _centroids.Count - 1) {
-                        Centroid predecessor = _centroids.Predecessor(centroid.Mean).Value;
-                        delta = centroid.Mean - predecessor.Mean;
-                    }
-                    else {
-                        Centroid successor = _centroids.Successor(centroid.Mean).Value;
-                        Centroid predecessor = _centroids.Predecessor(centroid.Mean).Value;
-                        delta = (successor.Mean - predecessor.Mean) / 2;
-                    }
-
-                    double estimated = centroid.Mean + ((q - t) / k - .5) * delta;
-
-                    // If estimated value is higher than max, return max
-                    return Math.Min(estimated, this.Max);
-                }
-
-                t += k;
-                i++;
+            double index = quantile * _count;
+            if (index < 1)
+            {
+                return Min;
+            }
+            if (index > Count-1)
+            {
+                return Max;
             }
 
-            return last.Mean;
+            Centroid currentNode = _centroids.First().Value;
+            Centroid lastNode = _centroids.Last().Value;
+            double currentWeight = currentNode.Count;
+            if (currentWeight == 2 && index <= 2)
+            {
+                // first node is a double weight with one sample at min, sou we can infer location of other sample
+                return 2 * currentNode.Mean - Min;
+            }
+
+            if (_centroids.Last().Value.Count == 2 && index > Count - 2)
+            {
+                // likewise for last centroid
+                return 2 * lastNode.Mean - Max;
+            }
+
+            double weightSoFar = currentWeight / 2.0;
+
+            if (index < weightSoFar)
+            {
+                return WeightedAvg(Min, weightSoFar - index, currentNode.Mean, index - 1);
+            }
+
+            foreach (Centroid nextNode in _centroids.Values.Skip(1))
+            {
+                double nextWeight = nextNode.Count;
+                double dw = (currentWeight + nextWeight) / 2.0;
+
+                if (index < weightSoFar + dw)
+                {
+                    double leftExclusion = 0;
+                    double rightExclusion = 0;
+                    if (currentWeight == 1)
+                    {
+                        if (index < weightSoFar + 0.5)
+                        {
+                            return currentNode.Mean;
+                        }
+                        else
+                        {
+                            leftExclusion = 0.5;
+                        }
+                    }
+                    if (nextWeight == 1)
+                    {
+                        if (index >= weightSoFar + dw - 0.5)
+                        {
+                            return nextNode.Mean;
+                        }
+                        else
+                        {
+                            rightExclusion = 0.5;
+                        }
+                    }
+                    // centroids i and i+1 bracket our current point
+                    // we interpolate, but the weights are diminished if singletons are present
+                    double weight1 = index - weightSoFar - leftExclusion;
+                    double weight2 = weightSoFar + dw - index - rightExclusion;
+                    return WeightedAvg(currentNode.Mean, weight2, nextNode.Mean, weight1);
+                }
+
+                weightSoFar += dw;
+                currentNode = nextNode;
+                currentWeight = nextWeight;
+            }
+
+            double w1 = index - weightSoFar;
+            double w2 = Count - 1 - index;
+            return WeightedAvg(currentNode.Mean, w2, Max, w1);
+        }
+
+        private double WeightedAvg(double m1, double w1, double m2, double w2)
+        {
+            double total = w1 + w2;
+            double ret = m1 * w1/total + m2 * w2/total;
+            return ret;
         }
 
         /// <summary>
