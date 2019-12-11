@@ -48,6 +48,34 @@ namespace StatsLib.Tests {
         }
 
         [TestMethod]
+        public void TestWeightedDistribution()
+        {
+            Random r = new Random();
+
+            TDigest digest = new TDigest();
+            List<double> actual = new List<double>();
+            for (int i = 0; i < 10000; i++)
+            {
+                var v = r.NextDouble();
+                var w = r.Next(1, 10);
+                digest.Add(v, w);
+                for (int j = 0; j < w; j++)
+                {
+                    actual.Add(v);
+                }
+            }
+
+            actual.Sort();
+            Assert.AreEqual(actual.Count, digest.Count);
+
+            Assert.IsTrue(GetAvgError(actual, digest) < .01);
+            Assert.IsTrue(MaxIsEqual(actual, digest));
+            Assert.IsTrue(MinIsEqual(actual, digest));
+            var avgError = GetAvgPercentileError(actual, digest);
+            Assert.IsTrue(avgError < .0005);
+        }
+
+        [TestMethod]
         public void TestConstantValue() {
             Random r = new Random();
 
