@@ -154,7 +154,7 @@ namespace StatsLib {
                 Max = value;
             }
             else {
-                _newAvg = _oldAvg + (value - _oldAvg) / _count;
+                _newAvg = _oldAvg + (value - _oldAvg) * weight / _count;
                 _oldAvg = _newAvg;
                 Max = value > Max ? value : Max;
                 Min = value < Min ? value : Min;
