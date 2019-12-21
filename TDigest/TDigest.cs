@@ -1,11 +1,7 @@
 ﻿using C5;
 using System;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Collections.Generic;
-using System.Collections.Specialized;
-using System.Diagnostics;
 
 namespace StatsLib {
 
@@ -20,7 +16,7 @@ namespace StatsLib {
         /// of objects added to the digest unless custom weights are used.
         /// </summary>
         public double Count {
-            get { return _count; } 
+            get { return _count; }
         }
 
         /// <summary>
@@ -48,7 +44,7 @@ namespace StatsLib {
         /// The Average 
         /// </summary>
         public double Average {
-            get { return _count > 0 ? _newAvg : 0; } 
+            get { return _count > 0 ? _newAvg : 0; }
         }
 
         /// <summary>
@@ -93,7 +89,7 @@ namespace StatsLib {
         public TDigest(double accuracy = 0.02, double compression = 25) {
             if (accuracy <= 0) throw new ArgumentOutOfRangeException("Accuracy must be greater than 0");
             if (compression < 15) throw new ArgumentOutOfRangeException("Compression constant must be 15 or greater");
-            
+
             _centroids = new TreeDictionary<double, Centroid>();
             _rand = new Random();
             _count = 0;
@@ -105,9 +101,8 @@ namespace StatsLib {
         /// Construct a TDigest from a serialized string of Bytes created by the Serialize() method
         /// </summary>
         /// <param name="serialized"></param>
-        public TDigest(byte[] serialized) 
-            : this()
-        {
+        public TDigest(byte[] serialized)
+            : this() {
             if (serialized == null) throw new ArgumentNullException("Serialized parameter cannot be null");
 
             if ((serialized.Length - 48) % 16 != 0) {
@@ -121,7 +116,7 @@ namespace StatsLib {
             Min = BitConverter.ToDouble(serialized, 32);
             Max = BitConverter.ToDouble(serialized, 40);
 
-            var centroids = Enumerable.Range(0, (serialized.Length-48)/16)
+            var centroids = Enumerable.Range(0, (serialized.Length - 48) / 16)
                 .Select(i => new {
                     Mean = BitConverter.ToDouble(serialized, i * 16 + 48),
                     Count = BitConverter.ToDouble(serialized, i * 16 + 8 + 48)
@@ -196,7 +191,7 @@ namespace StatsLib {
 
                     if (toAdd.Update(weight, toAdd.Mean, out oldMean)) {
                         ReInsertCentroid(oldMean, toAdd);
-                    }                        
+                    }
                 }
             }
 
@@ -219,71 +214,57 @@ namespace StatsLib {
                 throw new InvalidOperationException("Cannot call Quantile() method until first Adding values to the digest");
             }
 
-            if (_centroids.Count == 1)
-            {
+            if (_centroids.Count == 1) {
                 return _centroids.First().Value.Mean;
             }
 
             double index = quantile * _count;
-            if (index < 1)
-            {
+            if (index < 1) {
                 return Min;
             }
-            if (index > Count-1)
-            {
+            if (index > Count - 1) {
                 return Max;
             }
 
             Centroid currentNode = _centroids.First().Value;
             Centroid lastNode = _centroids.Last().Value;
             double currentWeight = currentNode.Count;
-            if (currentWeight == 2 && index <= 2)
-            {
+            if (currentWeight == 2 && index <= 2) {
                 // first node is a double weight with one sample at min, sou we can infer location of other sample
                 return 2 * currentNode.Mean - Min;
             }
 
-            if (_centroids.Last().Value.Count == 2 && index > Count - 2)
-            {
+            if (_centroids.Last().Value.Count == 2 && index > Count - 2) {
                 // likewise for last centroid
                 return 2 * lastNode.Mean - Max;
             }
 
             double weightSoFar = currentWeight / 2.0;
 
-            if (index < weightSoFar)
-            {
+            if (index < weightSoFar) {
                 return WeightedAvg(Min, weightSoFar - index, currentNode.Mean, index - 1);
             }
 
-            foreach (Centroid nextNode in _centroids.Values.Skip(1))
-            {
+            foreach (Centroid nextNode in _centroids.Values.Skip(1)) {
                 double nextWeight = nextNode.Count;
                 double dw = (currentWeight + nextWeight) / 2.0;
 
-                if (index < weightSoFar + dw)
-                {
+                if (index < weightSoFar + dw) {
                     double leftExclusion = 0;
                     double rightExclusion = 0;
-                    if (currentWeight == 1)
-                    {
-                        if (index < weightSoFar + 0.5)
-                        {
+                    if (currentWeight == 1) {
+                        if (index < weightSoFar + 0.5) {
                             return currentNode.Mean;
                         }
-                        else
-                        {
+                        else {
                             leftExclusion = 0.5;
                         }
                     }
-                    if (nextWeight == 1)
-                    {
-                        if (index >= weightSoFar + dw - 0.5)
-                        {
+                    if (nextWeight == 1) {
+                        if (index >= weightSoFar + dw - 0.5) {
                             return nextNode.Mean;
                         }
-                        else
-                        {
+                        else {
                             rightExclusion = 0.5;
                         }
                     }
@@ -304,10 +285,9 @@ namespace StatsLib {
             return WeightedAvg(currentNode.Mean, w2, Max, w1);
         }
 
-        private double WeightedAvg(double m1, double w1, double m2, double w2)
-        {
+        private double WeightedAvg(double m1, double w1, double m2, double w2) {
             double total = w1 + w2;
-            double ret = m1 * w1/total + m2 * w2/total;
+            double ret = m1 * w1 / total + m2 * w2 / total;
             return ret;
         }
 
@@ -359,7 +339,7 @@ namespace StatsLib {
 
             foreach (Centroid c in _centroids.Values) {
                 if (c.Mean > centroid.Mean) break;
-                sum += c.Count; 
+                sum += c.Count;
             }
 
             double denom = _count;

@@ -1,13 +1,18 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 2013
-VisualStudioVersion = 12.0.31101.0
-MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TDigest", "TDigest\TDigest.csproj", "{909364F5-4F9A-444D-BE6A-CE2A6EF592B0}"
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.29613.14
+MinimumVisualStudioVersion = 15.0.26124.0
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TDigest", "TDigest\TDigest.csproj", "{909364F5-4F9A-444D-BE6A-CE2A6EF592B0}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TDigest.Tests", "TDigest.Tests\TDigest.Tests.csproj", "{7BCAFD59-C058-4E80-BE5A-B842522C951E}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TDigest.Tests", "TDigest.Tests\TDigest.Tests.csproj", "{7BCAFD59-C058-4E80-BE5A-B842522C951E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TDigest.CMD", "TDigest.CMD\TDigest.CMD.csproj", "{9965BA5F-9FA3-46C3-BD89-ACF58D2887C8}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TDigest.CMD", "TDigest.CMD\TDigest.CMD.csproj", "{9965BA5F-9FA3-46C3-BD89-ACF58D2887C8}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{7BA5CE8A-8138-40E0-87E2-468AC5F3B061}"
+	ProjectSection(SolutionItems) = preProject
+		.editorconfig = .editorconfig
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -30,6 +35,9 @@ Global
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {74267437-EA43-4CBE-923F-60ABAE4391F0}
 	EndGlobalSection
 	GlobalSection(Performance) = preSolution
 		HasPerformanceSessions = true
