@@ -1,13 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace StatsLib.CMD {
     class Program {
-        static void Main(string[] args) {
+        static void Main() {
             Random r = new Random();
 
             TDigest digestA = new TDigest();
